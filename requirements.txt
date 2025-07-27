@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pytesseract
+pdf2image
+pillow
+pyzbar
+PyPDF2
+gunicorn
+python-multipart
