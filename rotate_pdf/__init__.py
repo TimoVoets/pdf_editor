@@ -4,12 +4,15 @@ from PIL import Image
 import pytesseract
 import logging
 import io
-import time  
+import time
+import threading
 
 router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+ocr_lock = threading.Lock()
 
 def detect_rotation_angle(image: Image.Image) -> int:
     try:
@@ -32,7 +35,10 @@ def correct_image_rotation(pil_image: Image.Image, angle: int) -> Image.Image:
 
 @router.post("/rotate")
 async def rotate_pdf(file: UploadFile = File(...)):
-    start_time = time.perf_counter()  # ⏱️ Starttijd opnemen
+    if not ocr_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="OCR-verwerking is al bezig. Probeer het zo meteen opnieuw.")
+
+    start_time = time.perf_counter()
 
     try:
         contents = await file.read()
@@ -55,7 +61,7 @@ async def rotate_pdf(file: UploadFile = File(...)):
         resultaat_mb = len(pdf_bytes) / 1024 / 1024
         logger.info(f"Rotatie voltooid, PDF is {resultaat_mb:.2f} MB")
 
-        elapsed = time.perf_counter() - start_time  # ⏱️ Eindtijd meten
+        elapsed = time.perf_counter() - start_time
         logger.info(f"Totale verwerkingstijd: {elapsed:.2f} seconden")
 
         return Response(
@@ -67,3 +73,6 @@ async def rotate_pdf(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Interne fout: {e}")
         raise HTTPException(status_code=500, detail=f"Interne fout: {str(e)}")
+
+    finally:
+        ocr_lock.release()
