@@ -9,6 +9,7 @@ import PyPDF2
 import json
 import time
 import logging
+import threading
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -16,6 +17,8 @@ router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+split_lock = threading.Lock() 
 
 def extract_text_from_image(image: Image.Image):
     try:
@@ -38,12 +41,16 @@ async def split_pdf(
     keyword: str = Form(None),
     barcode: bool = Form(False)
 ):
+    if not split_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="Er is al een splitsing bezig. Probeer het zo meteen opnieuw.")
+
     methods_chosen = sum([
         bool(split_size is not None),
         bool(keyword),
         barcode
     ])
     if methods_chosen != 1:
+        split_lock.release()
         raise HTTPException(status_code=400, detail="Kies exact één splitsoptie: split_size, keyword of barcode.")
 
     start_time = time.perf_counter()
@@ -140,3 +147,6 @@ async def split_pdf(
     except Exception as e:
         logger.error(f"Fout tijdens split-verwerking: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Fout: {str(e)}")
+
+    finally:
+        split_lock.release()
